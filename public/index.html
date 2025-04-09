@@ -73,6 +73,28 @@
             color: #3498db;
             font-weight: bold;
         }
+        .ble-controls {
+            max-width: 1200px;
+            margin: 0 auto 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .device-status, .scan-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .device-status span:first-child, .scan-status span:first-child {
+            min-width: 100px;
+            font-weight: bold;
+        }
         .port-selector-container {
             max-width: 1200px;
             margin: 0 auto 20px;
@@ -112,11 +134,25 @@
 </head>
 <body>
     <h1>Insole Pressure Monitor</h1>
-    <div class="port-selector-container">
-        <select id="port-selector" class="form-control">
-            <option value="">Select a port...</option>
-        </select>
-        <button id="connect-button" class="btn btn-primary">Connect</button>
+    <div class="ble-controls">
+        <div class="status-container">
+            <div class="device-status">
+                <span>Left Insole: </span>
+                <span id="left-status">Disconnected</span>
+                <button id="disconnect-left-btn" class="btn btn-danger" disabled>Disconnect</button>
+            </div>
+            <div class="device-status">
+                <span>Right Insole: </span>
+                <span id="right-status">Disconnected</span>
+                <button id="disconnect-right-btn" class="btn btn-danger" disabled>Disconnect</button>
+            </div>
+            <div class="scan-status">
+                <span>Scan Status: </span>
+                <span id="scan-status">Idle</span>
+                <button id="start-scan-btn" class="btn btn-primary">Start Scan</button>
+                <button id="stop-scan-btn" class="btn btn-danger" disabled>Stop Scan</button>
+            </div>
+        </div>
     </div>
     <div class="container">
         <div class="values-panel">
@@ -129,7 +165,8 @@
         </div>
     </div>
 
-    <script src="/js/serial-manager.js"></script>
+    <!-- <script src="/js/serial-manager.js"></script> -->
+     <script src="/js/main.js"></script>
     <script>
         const socket = io();
         const pressureValues = document.getElementById('pressure-values');

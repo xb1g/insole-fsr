@@ -4,9 +4,11 @@
   "description": "Serial monitor with web interface",
   "main": "serial.ts",
   "scripts": {
-    "start": "ts-node serial.ts"
+    "start": "ts-node serial.ts",
+    "ble": "ts-node ble.ts"
   },
   "dependencies": {
+    "@abandonware/noble": "^1.9.2-26",
     "@serialport/list": "^13.0.0",
     "@types/express": "^4.17.21",
     "@types/node": "^20.9.0",
