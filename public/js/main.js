@@ -22,24 +22,76 @@ leftVisualization.className = "foot-outline";
 rightVisualization.className = "foot-outline";
 document.getElementById("foot-visualization").appendChild(leftVisualization);
 document.getElementById("foot-visualization").appendChild(rightVisualization);
+// add /foot.svg as the outline background
+leftVisualization.style.backgroundImage = "url('/leftfoot.svg')";
+leftVisualization.style.backgroundSize = "cover";
+rightVisualization.style.backgroundImage = "url('/rightfoot.svg')";
+// rightVisualization.style.transform = "scaleX(-1)"; // Mirror the right foot image horizontally
+rightVisualization.style.backgroundSize = "cover";
 
 // Sensor positions in percentages
-const sensorPositions = [
-  { x: 50, y: 90 }, // heel
-  { x: 70, y: 75 }, // back
-  { x: 75, y: 50 }, // middle
-  { x: 70, y: 25 }, // top
-  { x: 50, y: 10 }, // toe
-  { x: 30, y: 25 }, // side
-];
 
+const sensorPositionsL = [
+  { x: 75, y: 90 }, // heel
+  { x: 75, y: 70 }, // middle
+  { x: 70, y: 55 }, // new sensor 1
+  { x: 75, y: 37 }, // top
+
+  { x: 22, y: 45 }, // side
+  { x: 50, y: 30 }, // top tripod
+
+  { x: 35, y: 60 }, // new sensor 2
+
+  { x: 50, y: 75 }, // back
+];
+const sensorPositionsR = [
+  { x: 25, y: 90 }, // heel
+  { x: 50, y: 75 }, // back
+  { x: 28, y: 70 }, // middle
+  { x: 22, y: 37 }, // top
+  { x: 75, y: 45 }, // side
+  { x: 50, y: 30 }, // top tripod
+
+  { x: 70, y: 60 }, // new sensor 2
+
+  { x: 30, y: 55 }, // new sensor 1
+];
+// const sensorPositionsL = [
+//   { x: 22, y: 45 }, // side
+//   { x: 50, y: 30 }, // top tripod
+//   { x: 75, y: 37 }, // top
+
+//   { x: 35, y: 60 }, // new sensor 2
+//   { x: 70, y: 55 }, // new sensor 1
+
+//   { x: 75, y: 70 }, // middle
+//   { x: 50, y: 75 }, // back
+
+//   { x: 75, y: 90 }, // heel
+// ];
+// const sensorPositionsR = [
+//   { x: 75, y: 45 }, // side
+//   { x: 50, y: 30 }, // top tripod
+//   { x: 22, y: 37 }, // top
+
+//   { x: 70, y: 60 }, // new sensor 2
+//   { x: 30, y: 55 }, // new sensor 1
+
+//   { x: 28, y: 70 }, // middle
+//   { x: 50, y: 75 }, // back
+
+//   { x: 25, y: 90 }, // heel
+// ];
 // Create pressure points for both feet
 function createPressurePoints(container, side) {
+  let sensorPositions = side === "left" ? sensorPositionsL : sensorPositionsR;
+
   sensorPositions.forEach((pos, index) => {
     const point = document.createElement("div");
     point.className = "pressure-point";
     point.id = `${side}-sensor-${index}`;
     point.style.left = `${pos.x}%`;
+
     point.style.top = `${pos.y}%`;
     container.appendChild(point);
   });
@@ -108,8 +160,8 @@ function updateFootVisualization(values, side) {
   values.forEach((value, index) => {
     const point = document.getElementById(`${side}-sensor-${index}`);
     if (point) {
-      const size = Math.max(40, value + 40); // Base size 40px, increases with pressure
-      const intensity = Math.min(255, Math.floor((value / 100) * 255));
+      const size = 40 + Math.floor((value / 1024) * 50); // Base size 40px, increases with pressure
+      const intensity = Math.min(255, Math.floor((value / 1024) * 255));
       point.style.width = `${size}px`;
       point.style.height = `${size}px`;
       point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;

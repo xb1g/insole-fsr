@@ -9,8 +9,8 @@ import path from "path";
 const LEFT_DEVICE_NAME = "ESP32_LeftFoot"; // Or use MAC address / partial name
 const RIGHT_DEVICE_NAME = "ESP32_RightFoot"; // Or use MAC address / partial name
 // Use the Service/Characteristic UUIDs defined in your ESP32 BLE server code
-const TARGET_SERVICE_UUID = "4fafc2011fb5459e8fccc5c9c331914b"; // Example - NO dashes for noble discovery
-const TARGET_CHARACTERISTIC_UUID = "beb5483e36e14688b7f5ea07361b26a8"; // Example - NO dashes for noble discovery
+const TARGET_SERVICE_UUID = "4fafc2011fb5459e8fccc5c9c331914c"; // Example - NO dashes for noble discovery
+const TARGET_CHARACTERISTIC_UUID = "beb5483e36e14688b7f5ea07361b26a9"; // Example - NO dashes for noble discovery
 
 const app = express();
 const server = http.createServer(app);
@@ -81,53 +81,34 @@ function emitDeviceStatus() {
   console.log("Emitting Status:", status);
   io.emit("ble-connection-status", status);
 }
+function decodeADCValues(buffer: Uint8Array): number[] {
+  const values: number[] = [];
+
+  for (let i = 0; i < buffer.length; i += 2) {
+    // Ensure we have at least 2 bytes left
+    if (i + 1 >= buffer.length) break;
+
+    // Little-endian decoding
+    const value: number = buffer[i] | (buffer[i + 1] << 8);
+    values.push(value);
+  }
+
+  return values;
+}
 
 // Function to handle incoming BLE data
 function handleBleData(data: Buffer, deviceState: DeviceState) {
   try {
+    // data should be like Readings: [1]:344 [2]:344 [3]:340 [4]:328 [5]:287 [6]:272 [7]:297 [8]:89
+    // it is a databuffer of 16 bytes
     // *** CRITICAL: Assumes ESP32 sends data as a UTF8 string matching the old serial format ***
     // If ESP32 sends binary (e.g., array of uint16_t), parsing needs complete change here.
-    const line = data.toString("utf8").trim();
-    if (!line) {
-      console.log(`[BLE ${deviceState.name}] Received empty data`);
-      return;
-    }
-
-    console.log(`\n[BLE ${deviceState.name}] Raw data received:`, line);
-    const values: number[] = [];
-    const parts = line.split(" "); // Assuming space-separated values like "0_g:123 1_g:456 ..."
-    console.log(`[BLE ${deviceState.name}] Split data into parts:`, parts);
-
-    for (const part of parts) {
-      // Expecting format like "X_g:YYY"
-      if (part.includes("_g:")) {
-        const valueString = part.split(":")[1];
-        if (valueString) {
-          const value = parseInt(valueString);
-          if (!isNaN(value)) {
-            // Assuming raw value range 0-1024 as per original code
-            const percentValue = Number(((value / 1024) * 100).toFixed(1));
-            values.push(percentValue);
-            console.log(
-              `[BLE ${deviceState.name}] Parsed value: ${percentValue}% from part: ${part}`
-            );
-          } else {
-            console.log(
-              `[BLE ${deviceState.name}] Invalid number format in part:`,
-              part
-            );
-          }
-        } else {
-          console.log(
-            `[BLE ${deviceState.name}] Malformed part (no value after ':'):`,
-            part
-          );
-        }
-      }
-    }
+    const values: number[] = decodeADCValues(data as unknown as Uint8Array);
+    console.log(values, "adc");
 
     // Check if we got the expected number of values (e.g., 6)
-    if (values.length === 6) {
+    if (values.length === 8) {
+      // let values = adcValues;
       console.log(
         `\n[BLE ${deviceState.name}] ✓ Valid pressure data received:`
       );
@@ -140,11 +121,11 @@ function handleBleData(data: Buffer, deviceState: DeviceState) {
       io.emit(eventName, values);
     } else {
       console.log(
-        `[BLE ${deviceState.name}] ✗ Incomplete data: expected 6 values, got ${values.length}`
+        `[BLE ${deviceState.name}] ✗ Incomplete data: expected 8 values, got ${values.length}`
       );
-      console.log(
-        `  -> Parsed values: ${values.join(", ")} from raw: "${line}"`
-      );
+      // console.log(
+      //   `  -> Parsed values: ${values.join(", ")} from raw: "${line}"`
+      // );
     }
   } catch (error) {
     console.error(`[BLE ${deviceState.name}] Error processing data:`, error);
