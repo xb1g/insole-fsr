@@ -2,12 +2,10 @@
   "name": "insole-monitor",
   "version": "1.0.0",
   "description": "Serial monitor with web interface",
-  "main": "serial.ts",
+  "main": "main.ts",
   "scripts": {
-    "start": "node dist/ble.js",
-    "serial": "ts-node serial.ts",
-    "build": "tsc",
-    "deploy": "npm run build && mkdir -p docs && cp -r public/* docs/ && git add docs && git commit -m 'Deploy to GitHub Pages' && git push"
+    "start": "ts-node main.ts",
+    "serial": "ts-node serial.ts"
   },
   "dependencies": {
     "@abandonware/noble": "^1.9.2-26",
