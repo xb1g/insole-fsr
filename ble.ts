@@ -10,6 +10,7 @@ const LEFT_DEVICE_NAME = "ESP32_LeftFoot"; // Or use MAC address / partial name
 const RIGHT_DEVICE_NAME = "ESP32_RightFoot"; // Or use MAC address / partial name
 // Use the Service/Characteristic UUIDs defined in your ESP32 BLE server code
 const TARGET_SERVICE_UUID = "4fafc2011fb5459e8fccc5c9c331914c"; // Example - NO dashes for noble discovery
+
 const TARGET_CHARACTERISTIC_UUID = "beb5483e36e14688b7f5ea07361b26a9"; // Example - NO dashes for noble discovery
 
 const app = express();

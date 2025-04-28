@@ -4,8 +4,10 @@
   "description": "Serial monitor with web interface",
   "main": "serial.ts",
   "scripts": {
-    "start": "ts-node serial.ts",
-    "ble": "ts-node ble.ts"
+    "start": "node dist/ble.js",
+    "serial": "ts-node serial.ts",
+    "build": "tsc",
+    "deploy": "npm run build && mkdir -p docs && cp -r public/* docs/ && git add docs && git commit -m 'Deploy to GitHub Pages' && git push"
   },
   "dependencies": {
     "@abandonware/noble": "^1.9.2-26",
