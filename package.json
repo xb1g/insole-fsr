@@ -6,7 +6,8 @@
   "scripts": {
     "start": "ts-node main.ts",
     "serial": "ts-node serial.ts",
-    "build": "tsc && cp -r public dist/ || true"
+    "build": "tsc && rm -rf dist/public && mkdir -p dist/public && cp -r public/* dist/public/ || true",
+    "preview": "npx --yes serve main.js"
   },
   "dependencies": {
     "@abandonware/noble": "^1.9.2-26",
