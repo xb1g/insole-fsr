@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insole Pressure Monitor</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .values-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 1;
+        }
+        .sensor-value {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .heatmap-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            flex: 2;
+            position: relative;
+        }
+        .foot-outline {
+            width: 700px;
+            height: 800px;
+            margin: 0 auto;
+            position: relative;
+            border: 2px solid #666;
+            display: flex;
+justify-content: space-between;
+            /* border-radius: 150px 150px 0 0; */
+        }
+        .pressure-point {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #ff0000;
+            transform: translate(-50%, -50%);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .sensor-value strong {
+            color: #2c3e50;
+        }
+        .sensor-value span {
+            color: #3498db;
+            font-weight: bold;
+        }
+        .ble-controls {
+            max-width: 1200px;
+            margin: 0 auto 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .device-status, .scan-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .device-status span:first-child, .scan-status span:first-child {
+            min-width: 100px;
+            font-weight: bold;
+        }
+        .port-selector-container {
+            max-width: 1200px;
+            margin: 0 auto 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .form-control {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            flex: 1;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .btn-primary {
+            background-color: #3498db;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #2980b9;
+        }
+        .btn-danger {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Insole Pressure Monitor</h1>
+    <div class="ble-controls">
+        <div class="status-container">
+            <div class="device-status">
+                <span>Left Insole: </span>
+                <span id="left-status">Disconnected</span>
+                <button id="disconnect-left-btn" class="btn btn-danger" disabled>Disconnect</button>
+            </div>
+            <div class="device-status">
+                <span>Right Insole: </span>
+                <span id="right-status">Disconnected</span>
+                <button id="disconnect-right-btn" class="btn btn-danger" disabled>Disconnect</button>
+            </div>
+            <div class="scan-status">
+                <span>Scan Status: </span>
+                <span id="scan-status">Idle</span>
+                <button id="start-scan-btn" class="btn btn-primary">Start Scan</button>
+                <button id="stop-scan-btn" class="btn btn-danger" disabled>Stop Scan</button>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <div class="values-panel">
+            <h2>Pressure Values</h2>
+            <div id="pressure-values"></div>
+        </div>
+        <div class="heatmap-panel">
+            <h2>Pressure Heatmap</h2>
+            <div class="foot-outline" id="foot-visualization"></div>
+        </div>
+    </div>
+
+    <!-- <script src="/js/serial-manager.js"></script> -->
+     <script src="/js/main.js"></script>
+    <script>
+        const socket = io();
+        const pressureValues = document.getElementById('pressure-values');
+        const footVisualization = document.getElementById('foot-visualization');
+
+        // Sensor positions in percentages
+        const sensorPositions = [
+            { x: 50, y: 90 },   // A0 - heel
+            { x: 70, y: 75 },   // A1 - right back
+            { x: 75, y: 50 },   // A2 - right middle
+            { x: 70, y: 25 },   // A3 - right top
+            { x: 50, y: 10 },   // A4 - top most
+            { x: 30, y: 25 }    // A5 - left top
+        ];
+
+        // Create pressure points
+        sensorPositions.forEach((pos, index) => {
+            const point = document.createElement('div');
+            point.className = 'pressure-point';
+            point.id = `sensor-${index}`;
+            point.style.left = `${pos.x}%`;
+            point.style.top = `${pos.y}%`;
+            footVisualization.appendChild(point);
+        });
+
+        // Update data when received from server
+        socket.on('pressure-data', (values) => {
+            // Update pressure values display
+            pressureValues.innerHTML = values.map((value, i) => `
+                <div class="sensor-value">
+                    <strong>Sensor ${i + 1}:</strong>
+                    <span>${value.toFixed(2)} %</span>
+                </div>
+            `).join('');
+
+            // Update visualization
+            values.forEach((value, index) => {
+                const point = document.getElementById(`sensor-${index}`);
+                const size = value * 1 + 40; // Adjust size based on pressure dat
+                const intensity = Math.min(255, Math.floor((value / 100) * 255));
+                point.style.width = `${size}px`;
+                point.style.height = `${size}px`;
+                point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
+                point.textContent = `${value.toFixed(2)}%`;
+            });
+
+        });
+    </script>
+</body>
+</html>
