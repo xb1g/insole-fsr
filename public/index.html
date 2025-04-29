@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Insole Pressure Monitor</title>
-    <script src="/socket.io/socket.io.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -135,6 +134,8 @@ justify-content: space-between;
     </style>
 </head>
 <body>
+
+    <script src="/socket.io/socket.io.js"></script>
     <h1>Insole Pressure Monitor</h1>
     <div class="ble-controls">
         <div class="status-container">
@@ -168,8 +169,8 @@ justify-content: space-between;
     </div>
 
     <!-- <script src="/js/serial-manager.js"></script> -->
-     <script src="/js/main.js"></script>
-    <script>
+     <script src="js/main.js"></script>
+    <!-- <script>
         const socket = io();
         const pressureValues = document.getElementById('pressure-values');
         const footVisualization = document.getElementById('foot-visualization');
@@ -216,6 +217,6 @@ justify-content: space-between;
             });
 
         });
-    </script>
+    </script> -->
 </body>
 </html>

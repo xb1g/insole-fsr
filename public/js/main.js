@@ -33,28 +33,26 @@ rightVisualization.style.backgroundSize = "cover";
 
 const sensorPositionsL = [
   { x: 75, y: 90 }, // heel
-  { x: 75, y: 70 }, // middle
-  { x: 70, y: 55 }, // new sensor 1
-  { x: 75, y: 37 }, // top
-
-  { x: 22, y: 45 }, // side
-  { x: 50, y: 30 }, // top tripod
-
+  { x: 50, y: 75 }, // back
   { x: 35, y: 60 }, // new sensor 2
 
-  { x: 50, y: 75 }, // back
+  { x: 26, y: 42 }, // side
+  { x: 71, y: 10 }, // top tripod
+  { x: 75, y: 33 }, // top
+  { x: 70, y: 55 }, // new sensor 1
+
+  { x: 75, y: 70 }, // middle
 ];
 const sensorPositionsR = [
   { x: 25, y: 90 }, // heel
   { x: 50, y: 75 }, // back
-  { x: 28, y: 70 }, // middle
-  { x: 22, y: 37 }, // top
-  { x: 75, y: 45 }, // side
-  { x: 50, y: 30 }, // top tripod
-
   { x: 70, y: 60 }, // new sensor 2
+  { x: 72, y: 40 }, // side
+  { x: 28, y: 10 }, // top tripod
+  { x: 26, y: 33 }, // top
 
   { x: 30, y: 55 }, // new sensor 1
+  { x: 28, y: 70 }, // middle
 ];
 // const sensorPositionsL = [
 //   { x: 22, y: 45 }, // side
@@ -130,6 +128,7 @@ function openDB() {
 }
 
 function savePressureData(side, values) {
+  if (!isRecording) return;
   openDB().then((db) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
@@ -167,6 +166,9 @@ replayControls.innerHTML = `
   <button id="show-history-btn">Show History</button>
   <button id="replay-btn" disabled>Replay</button>
   <button id="clear-history-btn">Clear History</button>
+  <button id="start-recording-btn">Start Recording</button>
+  <button id="stop-recording-btn" disabled>Stop Recording</button>
+  <button id="download-csv-btn">Download CSV</button>
   <input id="history-range" type="range" min="0" max="0" value="0" style="width:200px;" disabled />
   <span id="history-timestamp"></span>
 `;
@@ -174,12 +176,108 @@ document.body.appendChild(replayControls);
 const showHistoryBtn = document.getElementById("show-history-btn");
 const replayBtn = document.getElementById("replay-btn");
 const clearHistoryBtn = document.getElementById("clear-history-btn");
+const startRecordingBtn = document.getElementById("start-recording-btn");
+const stopRecordingBtn = document.getElementById("stop-recording-btn");
+const downloadCsvBtn = document.getElementById("download-csv-btn");
 const historyRange = document.getElementById("history-range");
 const historyTimestamp = document.getElementById("history-timestamp");
 
 let historyData = [];
 let replayInterval = null;
 let replayIndex = 0;
+let isRecording = false;
+
+// --- Center of Mass Calculation ---
+/**
+ * Calculate the center of mass for an array of 2D pressure sensors.
+ * @param {Array} sensorPositions - Array of {x, y} objects for each sensor.
+ * @param {Array} pressures - Array of pressure values (0-1023) for each sensor.
+ * @returns {{x: number, y: number} | null} Center of mass coordinates or null if total pressure is zero.
+ */
+function calculateCenterOfMass(sensorPositions, pressures) {
+  let totalPressure = 0;
+  let weightedX = 0;
+  let weightedY = 0;
+  for (let i = 0; i < sensorPositions.length; i++) {
+    const p = pressures[i];
+    totalPressure += p;
+    weightedX += sensorPositions[i].x * p;
+    weightedY += sensorPositions[i].y * p;
+  }
+  if (totalPressure === 0) return null;
+  return {
+    x: weightedX / totalPressure,
+    y: weightedY / totalPressure,
+  };
+}
+
+// --- Center of Mass Marker Logic ---
+function createOrUpdateCOMMarker(container, id, com) {
+  let marker = container.querySelector(`#${id}`);
+  if (!marker) {
+    marker = document.createElement("div");
+    marker.id = id;
+    marker.className = "com-marker";
+    marker.style.position = "absolute";
+    marker.style.width = "18px";
+    marker.style.height = "18px";
+    marker.style.borderRadius = "50%";
+    marker.style.border = "3px solid #e67e22";
+    marker.style.background = "rgba(241, 196, 15, 0.7)";
+    marker.style.zIndex = 10;
+    marker.style.pointerEvents = "none";
+    container.appendChild(marker);
+  }
+  if (com) {
+    marker.style.display = "block";
+    marker.style.left = `calc(${com.x}% - 9px)`;
+    marker.style.top = `calc(${com.y}% - 9px)`;
+  } else {
+    marker.style.display = "none";
+  }
+}
+
+// --- Add CSS for .com-marker ---
+(function addCOMMarkerStyle() {
+  const style = document.createElement("style");
+  style.innerHTML = `.com-marker { transition: left 0.1s, top 0.1s, background 0.2s; box-shadow: 0 0 8px 2px #f1c40f; }`;
+  document.head.appendChild(style);
+})();
+startRecordingBtn.onclick = () => {
+  isRecording = true;
+  startRecordingBtn.disabled = true;
+  stopRecordingBtn.disabled = false;
+};
+stopRecordingBtn.onclick = () => {
+  isRecording = false;
+  startRecordingBtn.disabled = false;
+  stopRecordingBtn.disabled = true;
+};
+
+downloadCsvBtn.onclick = async () => {
+  const allData = await getAllPressureData();
+  if (!allData.length) {
+    alert("No data to export.");
+    return;
+  }
+  let csv = "timestamp,side,";
+  const maxSensors = Math.max(...allData.map((d) => d.values.length));
+  for (let i = 0; i < maxSensors; i++) {
+    csv += `sensor${i + 1}` + (i < maxSensors - 1 ? "," : "\n");
+  }
+  allData.forEach((row) => {
+    csv += `${row.timestamp},${row.side},` + row.values.join(",") + "\n";
+  });
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "pressure_data.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
 
 showHistoryBtn.onclick = async () => {
   historyData = await getAllPressureData();
@@ -375,15 +473,21 @@ let latestRightValues = null;
 socket.on("pressure-data-left", (values) => {
   latestLeftValues = values;
   updateFootVisualization(values, "left");
+  const com = calculateCenterOfMass(sensorPositionsL, values);
+  createOrUpdateCOMMarker(leftVisualization, "com-marker-left", com);
   updatePressureValues(latestLeftValues, latestRightValues);
   savePressureData("left", values);
+  handleCadence("left", values);
 });
 
 socket.on("pressure-data-right", (values) => {
   latestRightValues = values;
   updateFootVisualization(values, "right");
+  const com = calculateCenterOfMass(sensorPositionsR, values);
+  createOrUpdateCOMMarker(rightVisualization, "com-marker-right", com);
   updatePressureValues(latestLeftValues, latestRightValues);
   savePressureData("right", values);
+  handleCadence("right", values);
 });
 
 // --- Button Event Listeners ---
@@ -423,3 +527,89 @@ style.innerHTML = `
   .status-connecting { color: orange; }
 `;
 document.head.appendChild(style);
+
+// --- Cadence Tracker ---
+const CADENCE_THRESHOLD = 15; // Pressure threshold for lift detection
+const cadenceData = { left: [], right: [] };
+const cadenceIntervals = { left: [], right: [] };
+let lastLiftTime = { left: null, right: null };
+let lastLiftState = { left: false, right: false };
+// Create cadence graph canvas
+const cadenceGraph = document.createElement("canvas");
+cadenceGraph.width = 600;
+cadenceGraph.height = 200;
+cadenceGraph.style.border = "1px solid #ccc";
+cadenceGraph.style.display = "block";
+cadenceGraph.style.margin = "20px auto";
+document.body.appendChild(cadenceGraph);
+const cadenceCtx = cadenceGraph.getContext("2d");
+
+function detectLift(side, values) {
+  // Only use the first sensor value for cadence detection
+  return values[0] < CADENCE_THRESHOLD;
+}
+
+function handleCadence(side, values) {
+  const now = Date.now() / 1000;
+  const lifted = detectLift(side, values);
+  if (lifted && !lastLiftState[side]) {
+    // Foot just lifted
+    if (lastLiftTime[side] !== null) {
+      const interval = now - lastLiftTime[side];
+      cadenceIntervals[side].push(interval);
+      if (cadenceIntervals[side].length > 50) cadenceIntervals[side].shift();
+    }
+    cadenceData[side].push(now);
+    if (cadenceData[side].length > 100) cadenceData[side].shift();
+    lastLiftTime[side] = now;
+    drawCadenceGraph();
+  }
+  lastLiftState[side] = lifted;
+}
+
+function drawCadenceGraph() {
+  cadenceCtx.clearRect(0, 0, cadenceGraph.width, cadenceGraph.height);
+  // Draw axes
+  cadenceCtx.strokeStyle = "#888";
+  cadenceCtx.beginPath();
+  cadenceCtx.moveTo(40, 10);
+  cadenceCtx.lineTo(40, 190);
+  cadenceCtx.lineTo(590, 190);
+  cadenceCtx.stroke();
+  // Draw cadence for left and right
+  ["left", "right"].forEach((side, idx) => {
+    const intervals = cadenceIntervals[side];
+    if (intervals.length < 2) return;
+    cadenceCtx.strokeStyle = side === "left" ? "#0074D9" : "#FF4136";
+    cadenceCtx.beginPath();
+    for (let i = 1; i < intervals.length; i++) {
+      const x = 40 + (i - 1) * (550 / 49);
+      const cadence = 60 / intervals[i]; // steps per minute
+      const y = 190 - Math.min(180, cadence * 3); // scale for graph
+      if (i === 1) cadenceCtx.moveTo(x, y);
+      else cadenceCtx.lineTo(x, y);
+    }
+    cadenceCtx.stroke();
+    // Draw label
+    cadenceCtx.fillStyle = cadenceCtx.strokeStyle;
+    cadenceCtx.fillText(
+      side.charAt(0).toUpperCase() + side.slice(1),
+      550,
+      30 + idx * 20
+    );
+  });
+  // Draw y-axis labels
+  cadenceCtx.fillStyle = "#000";
+  cadenceCtx.fillText("Cadence (steps/min)", 50, 20);
+  for (let i = 0; i <= 6; i++) {
+    const y = 190 - i * 30;
+    cadenceCtx.fillText((i * 20).toString(), 5, y + 5);
+  }
+}
+// --- Integrate cadence tracking into pressure data handling ---
+socket.on("pressure-data", (values) => {
+  // Assume left and right values are split or available
+  // If only one set, treat as left for demo
+  handleCadence("left", values);
+  // If you have right foot data, call handleCadence("right", rightValues);
+});
