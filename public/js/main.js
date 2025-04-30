@@ -456,7 +456,7 @@ function updateFootVisualization(values, side) {
       point.style.width = `${size}px`;
       point.style.height = `${size}px`;
       point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
-      point.textContent = `${value.toFixed(1)} N`;
+      point.textContent = `${value.toFixed(1)} a${index}`;
     }
   });
 }
