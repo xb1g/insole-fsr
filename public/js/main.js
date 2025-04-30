@@ -3,6 +3,33 @@
 
 const socket = io();
 
+// --- Sensor Calibration Configuration ---
+const sensorCalibration = {
+  // Default sensors (0-5): 100kg range
+  default: {
+    slope: 100 / 4096,
+    intercept: 0,
+  },
+  // High-sensitivity sensors (6-7): 3kg range
+  highSensitivity: {
+    slope: 3 / 4096,
+    intercept: 0,
+  },
+};
+
+// Calibration function
+function calibrateSensorValue(rawValue, sensorIndex) {
+  const config =
+    sensorIndex <= 5
+      ? sensorCalibration.default
+      : sensorCalibration.highSensitivity;
+  return config.slope * rawValue + config.intercept;
+}
+
+// Utility: Convert kg to Newtons
+function kgToNewtons(kg) {
+  return kg * 9.80665;
+}
 // --- DOM Elements (replace with your actual element IDs) ---
 const leftStatusEl = document.getElementById("left-status");
 const rightStatusEl = document.getElementById("right-status");
@@ -195,6 +222,7 @@ let isRecording = false;
  * @returns {{x: number, y: number} | null} Center of mass coordinates or null if total pressure is zero.
  */
 function calculateCenterOfMass(sensorPositions, pressures) {
+  // Ensure pressures are calibrated values (in kg)
   let totalPressure = 0;
   let weightedX = 0;
   let weightedY = 0;
@@ -420,6 +448,7 @@ socket.on("ble-connection-status", (status) => {
 // Function to update visualization for a foot
 function updateFootVisualization(values, side) {
   values.forEach((value, index) => {
+    // value = kgToNewtons(calibrateSensorValue(value, index)); // Convert to kg
     const point = document.getElementById(`${side}-sensor-${index}`);
     if (point) {
       const size = 40 + Math.floor((value / 1024) * 50); // Base size 40px, increases with pressure
@@ -427,20 +456,21 @@ function updateFootVisualization(values, side) {
       point.style.width = `${size}px`;
       point.style.height = `${size}px`;
       point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
-      point.textContent = `${value.toFixed(1)}%`;
+      point.textContent = `${value.toFixed(1)} N`;
     }
   });
 }
 
-// Update pressure values display
-function updatePressureValues(leftValues, rightValues) {
+// Update pressure values display (show calibrated kg everywhere except distribution dashboard)
+function updatePressureValues(leftValues, rightValues, options = {}) {
+  // options: {distribution: boolean}
   const allValues = [];
   if (leftValues) {
     allValues.push(
       ...leftValues.map((value, i) => ({
         side: "Left",
         sensor: i + 1,
-        value: value,
+        value: calibrateSensorValue(value, i),
       }))
     );
   }
@@ -449,46 +479,24 @@ function updatePressureValues(leftValues, rightValues) {
       ...rightValues.map((value, i) => ({
         side: "Right",
         sensor: i + 1,
-        value: value,
+        value: calibrateSensorValue(value, i),
       }))
     );
   }
 
   pressureValues.innerHTML = allValues
-    .map(
-      ({ side, sensor, value }) => `
-        <div class="sensor-value">
-            <strong>${side} Sensor ${sensor}:</strong>
-            <span>${value.toFixed(1)}%</span>
-        </div>
-    `
-    )
+    .map(({ side, sensor, value }) => {
+      displayValue = kgToNewtons(value);
+      unit = "N";
+
+      return `<div class="sensor-value"><strong>${side} Sensor ${sensor}:</strong> <span>${displayValue.toFixed(2)} ${unit}</span></div>`;
+    })
     .join("");
 }
 
 // Store the latest values
 let latestLeftValues = null;
 let latestRightValues = null;
-
-socket.on("pressure-data-left", (values) => {
-  latestLeftValues = values;
-  updateFootVisualization(values, "left");
-  const com = calculateCenterOfMass(sensorPositionsL, values);
-  createOrUpdateCOMMarker(leftVisualization, "com-marker-left", com);
-  updatePressureValues(latestLeftValues, latestRightValues);
-  savePressureData("left", values);
-  handleCadence("left", values);
-});
-
-socket.on("pressure-data-right", (values) => {
-  latestRightValues = values;
-  updateFootVisualization(values, "right");
-  const com = calculateCenterOfMass(sensorPositionsR, values);
-  createOrUpdateCOMMarker(rightVisualization, "com-marker-right", com);
-  updatePressureValues(latestLeftValues, latestRightValues);
-  savePressureData("right", values);
-  handleCadence("right", values);
-});
 
 // --- Button Event Listeners ---
 if (startScanBtn) {
@@ -612,4 +620,82 @@ socket.on("pressure-data", (values) => {
   // If only one set, treat as left for demo
   handleCadence("left", values);
   // If you have right foot data, call handleCadence("right", rightValues);
+});
+
+// socket.on("pressure-data-left", (rawValues) => {
+//   // Calibrate and convert to Newtons
+//   const newtonValues = rawValues.map((raw, i) =>
+//     kgToNewtons(calibrateSensorValue(raw, i))
+//   );
+//   // Update pressure values display
+//   pressureValues.innerHTML = newtonValues
+//     .map(
+//       (value, i) => `
+//     <div class="sensor-value">
+//       <strong>Left Sensor ${i + 1}:</strong>
+//       <span>${value.toFixed(2)} N</span>
+//     </div>
+//   `
+//     )
+//     .join("");
+//   // Update visualization
+//   newtonValues.forEach((value, index) => {
+//     const point = document.getElementById(`left-sensor-${index}`);
+//     const size = Math.max(20, value * 2 + 40); // Adjust size based on Newtons
+//     const maxNewton = 1000; // Adjust as needed for your sensor range
+//     const intensity = Math.min(255, Math.floor((value / maxNewton) * 255));
+//     point.style.width = `${size}px`;
+//     point.style.height = `${size}px`;
+//     point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
+//     point.textContent = `${value.toFixed(1)} N`;
+//   });
+// });
+
+// socket.on("pressure-data-right", (rawValues) => {
+//   // Calibrate and convert to Newtons
+//   const newtonValues = rawValues.map((raw, i) =>
+//     kgToNewtons(calibrateSensorValue(raw, i))
+//   );
+//   // Update pressure values display
+//   pressureValues.innerHTML += newtonValues
+//     .map(
+//       (value, i) => `
+//     <div class="sensor-value">
+//       <strong>Right Sensor ${i + 1}:</strong>
+//       <span>${value.toFixed(2)} N</span>
+//     </div>
+//   `
+//     )
+//     .join("");
+//   // Update visualization
+//   newtonValues.forEach((value, index) => {
+//     const point = document.getElementById(`right-sensor-${index}`);
+//     const size = Math.max(20, value * 2 + 40); // Adjust size based on Newtons
+//     const maxNewton = 1000; // Adjust as needed for your sensor range
+//     const intensity = Math.min(255, Math.floor((value / maxNewton) * 255));
+//     point.style.width = `${size}px`;
+//     point.style.height = `${size}px`;
+//     point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
+//     point.textContent = `${value.toFixed(1)} N`;
+//   });
+// });
+
+socket.on("pressure-data-left", (values) => {
+  latestLeftValues = values;
+  updateFootVisualization(values, "left");
+  const com = calculateCenterOfMass(sensorPositionsL, values);
+  createOrUpdateCOMMarker(leftVisualization, "com-marker-left", com);
+  updatePressureValues(latestLeftValues, latestRightValues);
+  savePressureData("left", values);
+  handleCadence("left", values);
+});
+
+socket.on("pressure-data-right", (values) => {
+  latestRightValues = values;
+  updateFootVisualization(values, "right");
+  const com = calculateCenterOfMass(sensorPositionsR, values);
+  createOrUpdateCOMMarker(rightVisualization, "com-marker-right", com);
+  updatePressureValues(latestLeftValues, latestRightValues);
+  savePressureData("right", values);
+  handleCadence("right", values);
 });
