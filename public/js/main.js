@@ -2,6 +2,19 @@
 // <script src="/socket.io/socket.io.js"></script>
 
 const socket = io();
+// Track buzzer state per side to avoid redundant commands
+const buzzerState = { left: false, right: false };
+/**
+ * Emit buzzer command via socket if state changes
+ * @param {"left"|"right"} device
+ * @param {boolean} on
+ */
+function writeBuzzerState(device, on) {
+  if (buzzerState[device] !== on) {
+    buzzerState[device] = on;
+    socket.emit("buzzer", { device, on });
+  }
+}
 
 // --- Sensor Calibration Configuration ---
 const sensorCalibration = {
@@ -40,6 +53,44 @@ const startScanBtn = document.getElementById("start-scan-btn");
 const stopScanBtn = document.getElementById("stop-scan-btn");
 const disconnectLeftBtn = document.getElementById("disconnect-left-btn");
 const disconnectRightBtn = document.getElementById("disconnect-right-btn");
+const pressureThresholdInput = document.getElementById("pressure-threshold");
+const thresholdDurationInput = document.getElementById("threshold-duration");
+
+// --- Threshold Alarm State ---
+let pressureThreshold = parseFloat(pressureThresholdInput.value); // In Newtons
+let thresholdDuration = parseFloat(thresholdDurationInput.value) * 1000; // In milliseconds
+const sensorAlarmTimers = {}; // Stores setTimeout IDs for each sensor { 'left-sensor-0': timerId, ... }
+const sensorAlarmState = {}; // Stores alarm status { 'left-sensor-0': true, ... }
+
+pressureThresholdInput.onchange = (e) => {
+  pressureThreshold = parseFloat(e.target.value);
+  console.log(`Pressure threshold set to: ${pressureThreshold} N`);
+  // Reset alarms when threshold changes
+  resetAllAlarms();
+};
+
+thresholdDurationInput.onchange = (e) => {
+  thresholdDuration = parseFloat(e.target.value) * 1000;
+  console.log(`Threshold duration set to: ${thresholdDuration / 1000} s`);
+  // Reset alarms when duration changes
+  resetAllAlarms();
+};
+
+function resetAllAlarms() {
+  Object.values(sensorAlarmTimers).forEach(clearTimeout);
+  for (const sensorId in sensorAlarmState) {
+    sensorAlarmState[sensorId] = false;
+    const point = document.getElementById(sensorId);
+    if (point && point.classList.contains("alarm")) {
+      point.classList.remove("alarm");
+      // Restore original color/style if needed, handled by updateFootVisualization
+    }
+  }
+  // Clear the timer object itself
+  for (const key in sensorAlarmTimers) {
+    delete sensorAlarmTimers[key];
+  }
+}
 
 // --- Pressure Display Elements ---
 const pressureValues = document.getElementById("pressure-values");
@@ -530,15 +581,70 @@ socket.on("ble-connection-status", (status) => {
 // Function to update visualization for a foot
 function updateFootVisualization(values, side) {
   values.forEach((value, index) => {
-    value = kgToNewtons(calibrateSensorValue(value, index)); // Convert to kg
-    const point = document.getElementById(`${side}-sensor-${index}`);
+    const calibratedValueKg = calibrateSensorValue(value, index);
+    const pressureN = kgToNewtons(calibratedValueKg);
+    const sensorId = `${side}-sensor-${index}`;
+    const point = document.getElementById(sensorId);
+
     if (point) {
-      const size = 40 + Math.floor((value / 1024) * 50); // Base size 40px, increases with pressure
-      const intensity = Math.min(255, Math.floor((value / 1024) * 255));
-      point.style.width = `${size}px`;
-      point.style.height = `${size}px`;
-      point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
-      point.textContent = `${value.toFixed(1)} N`;
+      // --- Visual Update based on pressure ---
+      const baseSize = 20; // Smaller base size
+      const maxSizeScale = 30; // Max additional size
+      const maxPressureReference = 100; // Reference max pressure in N for scaling size/color
+
+      const size =
+        baseSize +
+        Math.min(
+          maxSizeScale,
+          (pressureN / maxPressureReference) * maxSizeScale
+        );
+      const intensity = Math.min(
+        255,
+        Math.floor((pressureN / maxPressureReference) * 255)
+      );
+
+      // --- Threshold Alarm Logic ---
+      if (pressureN > pressureThreshold) {
+        if (!sensorAlarmTimers[sensorId]) {
+          // Start timer if not already running
+          sensorAlarmTimers[sensorId] = setTimeout(() => {
+            console.log(`Alarm triggered for ${sensorId}`);
+            sensorAlarmState[sensorId] = true;
+            point.classList.add("alarm"); // Add alarm class
+            delete sensorAlarmTimers[sensorId]; // Remove timer once triggered
+            // Emit buzzer ON (only right buzzer exists)
+            writeBuzzerState("right", true);
+          }, thresholdDuration);
+        }
+      } else {
+        // Pressure is below threshold
+        if (sensorAlarmTimers[sensorId]) {
+          // Clear timer if pressure drops before duration
+          clearTimeout(sensorAlarmTimers[sensorId]);
+          delete sensorAlarmTimers[sensorId];
+        }
+        if (sensorAlarmState[sensorId]) {
+          // Reset alarm state if it was active
+          sensorAlarmState[sensorId] = false;
+          point.classList.remove("alarm");
+          // Emit buzzer OFF (only right buzzer exists)
+          writeBuzzerState("right", false);
+        }
+      }
+
+      // Apply visual styles (only if not in alarm state, or handle alarm style separately)
+      if (!sensorAlarmState[sensorId]) {
+        point.style.width = `${40 + size}px`;
+        point.style.height = `${40 + size}px`;
+        point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
+        point.classList.remove("alarm"); // Ensure alarm class is removed if state is false
+      } else {
+        // Keep alarm style (e.g., yellow background, potentially fixed size)
+        point.style.backgroundColor = "yellow";
+        point.style.width = `${baseSize + maxSizeScale}px`; // Max size when alarmed
+        point.style.height = `${baseSize + maxSizeScale}px`;
+      }
+      point.textContent = `${pressureN.toFixed(1)} N`;
     }
   });
 }
@@ -778,6 +884,7 @@ socket.on("pressure-data", (data) => {
 socket.on("pressure-data-left", (values) => {
   // Calibrate values
   const calibrated = values.map((v, i) => calibrateSensorValue(v, i));
+  console.log("Left foot values:", calibrated);
   // Save data if recording
 
   savePressureData("left", calibrated);

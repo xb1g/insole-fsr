@@ -11,7 +11,9 @@ const RIGHT_DEVICE_NAME = "ESP32_RightFoot"; // Or use MAC address / partial nam
 // Use the Service/Characteristic UUIDs defined in your ESP32 BLE server code
 const TARGET_SERVICE_UUID = "4fafc2011fb5459e8fccc5c9c331914c"; // Example - NO dashes for noble discovery
 
-const TARGET_CHARACTERISTIC_UUID = "beb5483e36e14688b7f5ea07361b26a9"; // Example - NO dashes for noble discovery
+const TARGET_CHARACTERISTIC_UUID = "beb5483e36e14688b7f5ea07361b26a9"; // Notify characteristic (NO dashes)
+// Buzzer write characteristic UUID (supports write)
+const BUZZER_CHARACTERISTIC_UUID = "beb5483e36e14688b7f5ea07361b26aa";
 
 const app = express();
 const server = http.createServer(app);
@@ -26,6 +28,8 @@ interface DeviceState {
   targetName: string; // Name we are looking for
   serviceUUID: string;
   characteristicUUID: string;
+  writeCharacteristicUUID: string;
+  writeCharacteristic: noble.Characteristic | null;
 }
 
 const leftDevice: DeviceState = {
@@ -37,6 +41,8 @@ const leftDevice: DeviceState = {
   targetName: LEFT_DEVICE_NAME,
   serviceUUID: TARGET_SERVICE_UUID,
   characteristicUUID: TARGET_CHARACTERISTIC_UUID,
+  writeCharacteristicUUID: BUZZER_CHARACTERISTIC_UUID,
+  writeCharacteristic: null,
 };
 
 const rightDevice: DeviceState = {
@@ -48,6 +54,8 @@ const rightDevice: DeviceState = {
   targetName: RIGHT_DEVICE_NAME,
   serviceUUID: TARGET_SERVICE_UUID,
   characteristicUUID: TARGET_CHARACTERISTIC_UUID,
+  writeCharacteristicUUID: BUZZER_CHARACTERISTIC_UUID,
+  writeCharacteristic: null,
 };
 
 const devicesToManage: DeviceState[] = [leftDevice, rightDevice];
@@ -184,29 +192,44 @@ async function connectAndSetup(
     console.log(`[BLE ${deviceState.name}] Found service: ${service.uuid}`);
 
     console.log(`[BLE ${deviceState.name}] Discovering characteristics...`);
+    // Discover both notify and write characteristics
     const characteristics = await service.discoverCharacteristicsAsync([
       deviceState.characteristicUUID,
+      deviceState.writeCharacteristicUUID,
     ]);
-
-    if (characteristics.length === 0) {
+    // Extract notify and write characteristics
+    const notifyChar = characteristics.find(
+      (c) => c.uuid === deviceState.characteristicUUID
+    );
+    const writeChar = characteristics.find(
+      (c) => c.uuid === deviceState.writeCharacteristicUUID
+    );
+    if (!notifyChar) {
       throw new Error(
-        `Characteristic ${deviceState.characteristicUUID} not found.`
+        `Notify characteristic ${deviceState.characteristicUUID} not found.`
       );
     }
-    const characteristic = characteristics[0];
-    deviceState.characteristic = characteristic;
+    if (!writeChar) {
+      throw new Error(
+        `Write characteristic ${deviceState.writeCharacteristicUUID} not found.`
+      );
+    }
+    deviceState.characteristic = notifyChar;
+    deviceState.writeCharacteristic = writeChar;
     console.log(
-      `[BLE ${deviceState.name}] Found characteristic: ${characteristic.uuid}`
+      `[BLE ${deviceState.name}] Found notify: ${notifyChar.uuid}, write: ${writeChar.uuid}`
     );
 
-    // Subscribe to notifications
-    if (characteristic.properties.includes("notify")) {
+    // Subscribe to notifications on notifyChar
+    if (deviceState.characteristic.properties.includes("notify")) {
       console.log(`[BLE ${deviceState.name}] Subscribing to notifications...`);
-      characteristic.on("data", (data) => handleBleData(data, deviceState));
-      await characteristic.subscribeAsync();
+      deviceState.characteristic.on("data", (data) =>
+        handleBleData(data, deviceState)
+      );
+      await deviceState.characteristic.subscribeAsync();
       console.log(`[BLE ${deviceState.name}] Subscribed successfully.`);
     } else {
-      throw new Error("Characteristic does not support notifications.");
+      throw new Error("Notify characteristic does not support notifications.");
     }
 
     // Final status update after successful setup
@@ -405,6 +428,46 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("Web Client disconnected:", socket.id);
   });
+  // Handle buzzer commands from client
+  socket.on(
+    "buzzer",
+    async (data: { device: "left" | "right"; on: boolean }) => {
+      const ds = data.device === "left" ? leftDevice : rightDevice;
+      if (ds.writeCharacteristic && ds.connected) {
+        const buf = Buffer.from([data.on ? 0x01 : 0x00]);
+        try {
+          await ds.writeCharacteristic.writeAsync(buf, false);
+          console.log(`[BLE ${ds.name}] Buzzer ${data.on ? "ON" : "OFF"}`);
+        } catch (err) {
+          console.error(`[BLE ${ds.name}] Error writing buzzer state:`, err);
+        }
+      } else {
+        console.warn(
+          `[BLE ${ds.name}] Cannot write buzzer state, device not connected or characteristic missing`
+        );
+      }
+    }
+  );
+  // Handle buzzer control from client
+  // socket.on(
+  //   "buzzer",
+  //   async (data: { device: "left" | "right"; on: boolean }) => {
+  //     const ds = data.device === "left" ? leftDevice : rightDevice;
+  //     if (ds.writeCharacteristic && ds.connected) {
+  //       const buf = Buffer.from([data.on ? 0x01 : 0x00]);
+  //       try {
+  //         await ds.writeCharacteristic.writeAsync(buf, false);
+  //         console.log(`[BLE ${ds.name}] Buzzer ${data.on ? "ON" : "OFF"}`);
+  //       } catch (err) {
+  //         console.error(`[BLE ${ds.name}] Error writing buzzer:`, err);
+  //       }
+  //     } else {
+  //       console.warn(
+  //         `[BLE ${ds.name}] Cannot write buzzer state, not connected or missing characteristic`
+  //       );
+  //     }
+  //   }
+  // );
 });
 
 // --- Start the Server ---
