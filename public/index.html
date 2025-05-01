@@ -5,131 +5,246 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Insole Pressure Monitor</title>
     <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2ecc71;
+            --danger-color: #e74c3c;
+            --light-gray: #f8f9fa;
+            --medium-gray: #ecf0f1;
+            --dark-gray: #34495e;
+            --text-color: #2c3e50;
+            --white: #ffffff;
+            --border-radius: 6px;
+            --box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: var(--medium-gray);
+            color: var(--text-color);
+            line-height: 1.6;
         }
-        .container {
-            display: flex;
-            gap: 20px;
-            max-width: 1200px;
-            margin: 0 auto;
+
+        h1, h2 {
+            color: var(--dark-gray);
+            margin-bottom: 1em;
+            text-align: center;
         }
-        .values-panel {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            flex: 1;
-        }
-        .sensor-value {
-            margin: 10px 0;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 4px;
-        }
-        .heatmap-panel {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            flex: 2;
-            position: relative;
-        }
-        .foot-outline {
-            width: 700px;
-            height: 800px;
-            margin: 0 auto;
-            position: relative;
-            border: 2px solid #666;
-            display: flex;
-justify-content: space-between;
-            /* border-radius: 150px 150px 0 0; */
-        }
-        .pressure-point {
-            position: absolute;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background-color: #ff0000;
-            transform: translate(-50%, -50%);
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-        }
+
         h1 {
-            color: #333;
+            font-size: 2em;
+        }
+
+        h2 {
+            font-size: 1.5em;
+            margin-top: 0;
+        }
+
+        .card {
+            background: var(--white);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
             margin-bottom: 20px;
         }
-        .sensor-value strong {
-            color: #2c3e50;
-        }
-        .sensor-value span {
-            color: #3498db;
-            font-weight: bold;
-        }
+
         .ble-controls {
             max-width: 1200px;
             margin: 0 auto 20px;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+
         .status-container {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Responsive grid */
+            gap: 20px;
         }
+
         .device-status, .scan-status {
             display: flex;
-            align-items: center;
-            gap: 10px;
+            flex-direction: column; /* Stack elements vertically */
+            align-items: flex-start; /* Align items to the start */
+            gap: 8px;
+            padding: 15px;
+            border: 1px solid var(--medium-gray);
+            border-radius: var(--border-radius);
+            background-color: var(--light-gray);
         }
+
         .device-status span:first-child, .scan-status span:first-child {
-            min-width: 100px;
             font-weight: bold;
+            color: var(--dark-gray);
         }
-        .port-selector-container {
-            max-width: 1200px;
-            margin: 0 auto 20px;
+
+        .status-indicator {
+            font-weight: bold;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .status-indicator.connected {
+            background-color: var(--secondary-color);
+            color: var(--white);
+        }
+
+        .status-indicator.disconnected {
+            background-color: var(--danger-color);
+            color: var(--white);
+        }
+        .status-indicator.connecting {
+             background-color: #f39c12; /* Orange for connecting */
+             color: var(--white);
+        }
+        .status-indicator.scanning {
+             background-color: var(--primary-color);
+             color: var(--white);
+        }
+        .status-indicator.idle {
+             background-color: #95a5a6; /* Gray for idle */
+             color: var(--white);
+        }
+
+        .button-group {
             display: flex;
             gap: 10px;
-            align-items: center;
+            margin-top: 10px; /* Add space above buttons */
         }
-        .form-control {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 2fr; /* Adjust column ratio */
+            gap: 20px;
+            max-width: 1200px;
+            margin: 20px auto 0;
+        }
+
+        .values-panel {
             flex: 1;
         }
+
+        .sensor-value {
+            margin: 8px 0;
+            padding: 12px;
+            background: var(--light-gray);
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--primary-color);
+            font-size: 0.95em;
+        }
+        .sensor-value strong {
+            color: var(--dark-gray);
+        }
+        .sensor-value span {
+            color: var(--primary-color);
+            font-weight: bold;
+        }
+
+        .heatmap-panel {
+            flex: 2;
+            position: relative;
+            display: flex; /* Use flexbox for centering */
+            flex-direction: column;
+            align-items: center; /* Center content horizontally */
+        }
+
+        #foot-visualization {
+            display: flex;
+            justify-content: space-around; /* Space out feet */
+            width: 100%; /* Take full width of panel */
+            max-width: 700px; /* Limit max width */
+            height: auto; /* Adjust height automatically */
+            aspect-ratio: 7 / 8; /* Maintain approx aspect ratio */
+            margin-top: 20px;
+            gap: 20px; /* Add gap between feet */
+        }
+
+        .foot-outline {
+            width: 45%; /* Adjust width relative to container */
+            height: 100%;
+            position: relative;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: contain; /* Use contain to fit the image */
+            border: none; /* Remove default border */
+        }
+
+        .pressure-point {
+            position: absolute;
+            width: 35px; /* Slightly smaller points */
+            height: 35px;
+            border-radius: 50%;
+            background-color: rgba(255, 0, 0, 0.7); /* Base color with some transparency */
+            transform: translate(-50%, -50%);
+            transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            font-size: 11px;
+            font-weight: bold;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
         .btn {
-            padding: 8px 16px;
+            padding: 10px 20px;
             border: none;
-            border-radius: 4px;
+            border-radius: var(--border-radius);
             cursor: pointer;
             font-weight: bold;
-            transition: background-color 0.3s;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+            font-size: 0.95em;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
         .btn-primary {
-            background-color: #3498db;
-            color: white;
+            background-color: var(--primary-color);
+            color: var(--white);
         }
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             background-color: #2980b9;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
         }
         .btn-danger {
-            background-color: #e74c3c;
-            color: white;
+            background-color: var(--danger-color);
+            color: var(--white);
         }
-        .btn-danger:hover {
+        .btn-danger:hover:not(:disabled) {
             background-color: #c0392b;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+        .btn-secondary {
+            background-color: #7f8c8d; /* Gray secondary button */
+            color: var(--white);
+        }
+        .btn-secondary:hover:not(:disabled) {
+            background-color: #6c7a7d;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr; /* Stack panels on smaller screens */
+            }
+            #foot-visualization {
+                flex-direction: column; /* Stack feet vertically */
+                align-items: center;
+                height: auto;
+                gap: 30px;
+            }
+            .foot-outline {
+                width: 70%; /* Increase width when stacked */
+                height: auto;   
+                aspect-ratio: 1 / 1.9; /* Adjust aspect ratio */
+            }
+            .status-container {
+                 grid-template-columns: 1fr; /* Single column layout */
+            }
         }
     </style>
 </head>
@@ -137,34 +252,41 @@ justify-content: space-between;
 
     <script src="/socket.io/socket.io.js"></script>
     <h1>Insole Pressure Monitor</h1>
-    <div class="ble-controls">
+    <div class="ble-controls card">
+        <h2>Device Status & Control</h2>
         <div class="status-container">
             <div class="device-status">
                 <span>Left Insole: </span>
-                <span id="left-status">Disconnected</span>
-                <button id="disconnect-left-btn" class="btn btn-danger" disabled>Disconnect</button>
+                <span id="left-status" class="status-indicator disconnected">Disconnected</span>
+                <div class="button-group">
+                    <button id="disconnect-left-btn" class="btn btn-danger" disabled>Disconnect</button>
+                </div>
             </div>
             <div class="device-status">
                 <span>Right Insole: </span>
-                <span id="right-status">Disconnected</span>
-                <button id="disconnect-right-btn" class="btn btn-danger" disabled>Disconnect</button>
+                <span id="right-status" class="status-indicator disconnected">Disconnected</span>
+                 <div class="button-group">
+                    <button id="disconnect-right-btn" class="btn btn-danger" disabled>Disconnect</button>
+                </div>
             </div>
             <div class="scan-status">
                 <span>Scan Status: </span>
-                <span id="scan-status">Idle</span>
-                <button id="start-scan-btn" class="btn btn-primary">Start Scan</button>
-                <button id="stop-scan-btn" class="btn btn-danger" disabled>Stop Scan</button>
+                <span id="scan-status" class="status-indicator idle">Idle</span>
+                 <div class="button-group">
+                    <button id="start-scan-btn" class="btn btn-primary">Start Scan</button>
+                    <button id="stop-scan-btn" class="btn btn-secondary" disabled>Stop Scan</button> 
+                </div>
             </div>
         </div>
     </div>
     <div class="container">
-        <div class="values-panel">
+        <div class="values-panel card">
             <h2>Pressure Values</h2>
             <div id="pressure-values"></div>
         </div>
-        <div class="heatmap-panel">
+        <div class="heatmap-panel card" id="heatmap-panel">
             <h2>Pressure Heatmap</h2>
-            <div class="foot-outline" id="foot-visualization"></div>
+            <div id="foot-visualization"></div>
         </div>
     </div>
 

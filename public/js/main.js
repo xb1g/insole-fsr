@@ -7,13 +7,15 @@ const socket = io();
 const sensorCalibration = {
   // Default sensors (0-5): 100kg range
   default: {
-    slope: 100 / 4096,
-    intercept: 0,
+    a: 0.00000126,
+    b: 0.04648,
+    c: 0,
   },
   // High-sensitivity sensors (6-7): 3kg range
   highSensitivity: {
-    slope: 3 / 4096,
-    intercept: 0,
+    a: 2.416 * 10 ** -7,
+    b: 0.0006623,
+    c: 0,
   },
 };
 
@@ -23,7 +25,7 @@ function calibrateSensorValue(rawValue, sensorIndex) {
     sensorIndex <= 5
       ? sensorCalibration.default
       : sensorCalibration.highSensitivity;
-  return config.slope * rawValue + config.intercept;
+  return config.a * rawValue * rawValue + config.b * rawValue + config.c;
 }
 
 // Utility: Convert kg to Newtons
@@ -44,6 +46,67 @@ const pressureValues = document.getElementById("pressure-values");
 const leftVisualization = document.createElement("div");
 const rightVisualization = document.createElement("div");
 
+heatmapPanel = document.getElementById("heatmap-panel");
+// --- Gait Phase Display Elements ---
+const leftGaitPhase = document.createElement("div");
+leftGaitPhase.className = "gait-phase-indicator";
+leftGaitPhase.id = "left-gait-phase";
+leftVisualization.appendChild(leftGaitPhase);
+
+// Add foot SVG for left foot
+const leftFootSvg = document.createElement("img");
+leftFootSvg.style.backgroundImage = "url('/foot.svg')";
+leftFootSvg.style.backgroundSize = "cover";
+leftFootSvg.style.width = "80px";
+leftFootSvg.style.height = "80px";
+leftFootSvg.style.position = "absolute";
+leftFootSvg.style.transition = "transform 0.3s ease";
+// no border for the svg
+leftFootSvg.style.border = "none";
+leftVisualization.appendChild(leftFootSvg);
+
+const rightGaitPhase = document.createElement("div");
+rightGaitPhase.className = "gait-phase-indicator";
+rightGaitPhase.id = "right-gait-phase";
+rightVisualization.appendChild(rightGaitPhase);
+
+// Add foot SVG for right foot
+const rightFootSvg = document.createElement("img");
+rightFootSvg.style.backgroundImage = "url('/foot.svg')";
+rightFootSvg.style.backgroundSize = "cover";
+rightFootSvg.style.width = "80px";
+rightFootSvg.style.height = "80px";
+rightFootSvg.style.position = "absolute";
+rightFootSvg.style.transition = "transform 0.3s ease";
+rightVisualization.appendChild(rightFootSvg);
+
+// Function to update foot rotation/position based on phase
+function updateFootAnimation(element, phase) {
+  switch (phase) {
+    case "Heel Strike":
+      element.style.transform = "rotate(30deg)";
+      break;
+    case "Swing":
+      element.style.transform = "translateY(-30px)";
+      break;
+    case "Toe-Off":
+      element.style.transform = "rotate(-30deg)";
+      break;
+    default:
+      element.style.transform = "none";
+  }
+}
+
+// Add observers to update animations when phase text changes
+new MutationObserver(() => {
+  console.log("Phase text changed");
+  updateFootAnimation(leftFootSvg, leftGaitPhase.textContent);
+}).observe(leftGaitPhase, { childList: true });
+
+new MutationObserver(() => {
+  console.log("Phase text changed");
+  updateFootAnimation(rightFootSvg, rightGaitPhase.textContent);
+}).observe(rightGaitPhase, { childList: true });
 // Initialize visualizations
 leftVisualization.className = "foot-outline";
 rightVisualization.className = "foot-outline";
@@ -60,26 +123,26 @@ rightVisualization.style.backgroundSize = "cover";
 
 const sensorPositionsL = [
   { x: 75, y: 90 }, // heel
-  { x: 50, y: 75 }, // back
-  { x: 35, y: 60 }, // new sensor 2
+  { x: 50, y: 75 }, // back mid
+  { x: 35, y: 60 }, // back mid
 
-  { x: 26, y: 42 }, // side
-  { x: 71, y: 10 }, // top tripod
-  { x: 75, y: 33 }, // top
-  { x: 70, y: 55 }, // new sensor 1
+  { x: 26, y: 42 }, // top left tripod
+  { x: 71, y: 10 }, // toe
+  { x: 75, y: 33 }, // top right tripod
+  { x: 70, y: 55 }, // inside
 
-  { x: 75, y: 70 }, // middle
+  { x: 75, y: 70 }, // inside
 ];
 const sensorPositionsR = [
   { x: 25, y: 90 }, // heel
-  { x: 50, y: 75 }, // back
-  { x: 70, y: 60 }, // new sensor 2
-  { x: 72, y: 40 }, // side
-  { x: 28, y: 10 }, // top tripod
-  { x: 26, y: 33 }, // top
+  { x: 50, y: 75 }, // back mid
+  { x: 70, y: 60 }, // back mid
+  { x: 72, y: 40 }, // top right tripod
+  { x: 28, y: 10 }, // toe
+  { x: 26, y: 33 }, // top left tripod
 
-  { x: 30, y: 55 }, // new sensor 1
-  { x: 28, y: 70 }, // middle
+  { x: 30, y: 55 }, // inside
+  { x: 28, y: 70 }, // inside
 ];
 // const sensorPositionsL = [
 //   { x: 22, y: 45 }, // side
@@ -383,15 +446,22 @@ socket.on("connect", () => {
 });
 
 socket.on("disconnect", () => {
-  console.log("Disconnected from server");
-  // Optionally update UI to show server disconnected state
+  console.error("Disconnected from server!");
+  // Update UI to show server is down
   leftStatusEl.textContent = "Server Down?";
+  leftStatusEl.className = "status-indicator disconnected"; // Add class
   rightStatusEl.textContent = "Server Down?";
+  rightStatusEl.className = "status-indicator disconnected"; // Add class
   scanStatusEl.textContent = "N/A";
+  scanStatusEl.className = "status-indicator idle"; // Add class
+  startScanBtn.disabled = true;
+  stopScanBtn.disabled = true;
+  disconnectLeftBtn.disabled = true;
+  disconnectRightBtn.disabled = true;
 });
 
 socket.on("ble-connection-status", (status) => {
-  console.log("Received BLE Status:", status);
+  console.log("Received status:", status);
 
   // --- Auto-reconnect logic ---
   // Helper to reconnect if disconnected
@@ -409,46 +479,58 @@ socket.on("ble-connection-status", (status) => {
   // Update Left Device Status
   if (status.left.connecting) {
     leftStatusEl.textContent = `Connecting to ${status.left.targetName}...`;
-    leftStatusEl.className = "status-connecting";
+    leftStatusEl.className = "status-indicator connecting"; // Add class
+    disconnectLeftBtn.disabled = true;
   } else if (status.left.connected) {
     leftStatusEl.textContent = `Connected (${status.left.targetName})`;
-    leftStatusEl.className = "status-connected";
+    leftStatusEl.className = "status-indicator connected"; // Add class
+    disconnectLeftBtn.disabled = false;
   } else {
     leftStatusEl.textContent = `Disconnected (${status.left.targetName})`;
-    leftStatusEl.className = "status-disconnected";
+    leftStatusEl.className = "status-indicator disconnected"; // Add class
     tryReconnect("left");
+    disconnectLeftBtn.disabled = true;
   }
-  // Disable/enable disconnect button
-  disconnectLeftBtn.disabled =
-    !status.left.connected && !status.left.connecting;
 
-  // Update Right Device Status
+  // --- Right Device Status ---
   if (status.right.connecting) {
     rightStatusEl.textContent = `Connecting to ${status.right.targetName}...`;
-    rightStatusEl.className = "status-connecting";
+    rightStatusEl.className = "status-indicator connecting"; // Add class
+    disconnectRightBtn.disabled = true;
   } else if (status.right.connected) {
     rightStatusEl.textContent = `Connected (${status.right.targetName})`;
-    rightStatusEl.className = "status-connected";
+    rightStatusEl.className = "status-indicator connected"; // Add class
+    disconnectRightBtn.disabled = false;
   } else {
     rightStatusEl.textContent = `Disconnected (${status.right.targetName})`;
-    rightStatusEl.className = "status-disconnected";
+    rightStatusEl.className = "status-indicator disconnected"; // Add class
     tryReconnect("right");
+    disconnectRightBtn.disabled = true;
   }
-  // Disable/enable disconnect button
-  disconnectRightBtn.disabled =
-    !status.right.connected && !status.right.connecting;
 
-  // Update Scan Status
+  // --- Scan Status ---
   scanStatusEl.textContent = status.scanning ? "Scanning..." : "Idle";
-  startScanBtn.disabled =
-    status.scanning || (status.left.connected && status.right.connected); // Disable if scanning or both connected
-  stopScanBtn.disabled = !status.scanning;
+  if (status.scanning) {
+    scanStatusEl.className = "status-indicator scanning"; // Add class
+    startScanBtn.disabled = true;
+    stopScanBtn.disabled = false;
+  } else {
+    scanStatusEl.className = "status-indicator idle"; // Add class
+    startScanBtn.disabled = false;
+    stopScanBtn.disabled = true;
+  }
+
+  // Disable scan buttons if either device is connecting
+  if (status.left.connecting || status.right.connecting) {
+    startScanBtn.disabled = true;
+    stopScanBtn.disabled = true;
+  }
 });
 
 // Function to update visualization for a foot
 function updateFootVisualization(values, side) {
   values.forEach((value, index) => {
-    // value = kgToNewtons(calibrateSensorValue(value, index)); // Convert to kg
+    value = kgToNewtons(calibrateSensorValue(value, index)); // Convert to kg
     const point = document.getElementById(`${side}-sensor-${index}`);
     if (point) {
       const size = 40 + Math.floor((value / 1024) * 50); // Base size 40px, increases with pressure
@@ -456,7 +538,7 @@ function updateFootVisualization(values, side) {
       point.style.width = `${size}px`;
       point.style.height = `${size}px`;
       point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
-      point.textContent = `${value.toFixed(1)} a${index}`;
+      point.textContent = `${value.toFixed(1)} N`;
     }
   });
 }
@@ -679,23 +761,132 @@ socket.on("pressure-data", (values) => {
 //     point.textContent = `${value.toFixed(1)} N`;
 //   });
 // });
-
+socket.on("pressure-data", (data) => {
+  // data: { left: [...], right: [...] }
+  if (data.left) {
+    const phase = detectGaitPhase(data.left);
+    setFootPhaseRotation(leftVisualization, phase);
+    leftGaitPhase.textContent = phase.replace("-", " ");
+  }
+  if (data.right) {
+    const phase = detectGaitPhase(data.right);
+    setFootPhaseRotation(rightVisualization, phase);
+    rightGaitPhase.textContent = phase.replace("-", " ");
+  }
+});
+// Listen for left foot pressure data
 socket.on("pressure-data-left", (values) => {
+  // Calibrate values
+  const calibrated = values.map((v, i) => calibrateSensorValue(v, i));
+  // Save data if recording
+
+  savePressureData("left", calibrated);
+  // Update visualization for left foot
+  calibrated.forEach((value, index) => {
+    const point = document.getElementById(`left-sensor-${index}`);
+    if (point) {
+      const size = value * 1 + 40;
+      const intensity = Math.min(255, Math.floor((value / 100) * 255));
+      point.style.width = `${size}px`;
+      point.style.height = `${size}px`;
+      point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
+      point.textContent = `${value.toFixed(2)}%`;
+    }
+  });
+  // Gait phase logic
+  const phase = getGaitPhase(calibrated);
+  leftGaitPhase.textContent = phase;
   latestLeftValues = values;
   updateFootVisualization(values, "left");
   const com = calculateCenterOfMass(sensorPositionsL, values);
   createOrUpdateCOMMarker(leftVisualization, "com-marker-left", com);
   updatePressureValues(latestLeftValues, latestRightValues);
-  savePressureData("left", values);
-  handleCadence("left", values);
+  handleCadence("left", calibrated);
 });
 
+// Listen for right foot pressure data
 socket.on("pressure-data-right", (values) => {
+  // Calibrate values
+  const calibrated = values.map((v, i) => calibrateSensorValue(v, i));
+  // Save data if recording
+  savePressureData("right", calibrated);
+  // Update visualization for right foot
+  calibrated.forEach((value, index) => {
+    const point = document.getElementById(`right-sensor-${index}`);
+    if (point) {
+      const size = value * 1 + 40;
+      const intensity = Math.min(255, Math.floor((value / 100) * 255));
+      point.style.width = `${size}px`;
+      point.style.height = `${size}px`;
+      point.style.backgroundColor = `rgb(${intensity}, 0, 0)`;
+      point.textContent = `${value.toFixed(2)}%`;
+    }
+  });
+  // Gait phase logic
+  const phase = getGaitPhase(calibrated);
+  rightGaitPhase.textContent = phase;
   latestRightValues = values;
   updateFootVisualization(values, "right");
   const com = calculateCenterOfMass(sensorPositionsR, values);
   createOrUpdateCOMMarker(rightVisualization, "com-marker-right", com);
   updatePressureValues(latestLeftValues, latestRightValues);
-  savePressureData("right", values);
-  handleCadence("right", values);
+  handleCadence("right", calibrated);
 });
+
+// --- Gait Phase Detection ---
+function getGaitPhase(values) {
+  // values: calibrated pressure values for one foot
+  // Heuristic thresholds (tune as needed)
+  const heel = values[0];
+  const top = Math.max(values[3], values[5]);
+  const toe = values[4];
+  const heelThreshold = 5; // kg
+  const toeThreshold = 5; // kg
+  const topThreshold = 3; // kg
+  if (heel > heelThreshold && top < topThreshold && toe < toeThreshold) {
+    return "Heel Strike";
+  } else if (top > topThreshold && heel > heelThreshold && toe < toeThreshold) {
+    return "Mid Stance";
+  } else if (toe > toeThreshold && heel < heelThreshold) {
+    return "Toe-Off";
+  } else {
+    return "Swing";
+  }
+}
+
+// --- Socket Listeners ---
+// socket.on("pressure-data", (data) => {
+//   // data: { left: [raw values], right: [raw values] }
+//   if (!data) return;
+//   const leftRaw = data.left || [];
+//   const rightRaw = data.right || [];
+//   const leftCal = leftRaw.map((v, i) => calibrateSensorValue(v, i));
+//   const rightCal = rightRaw.map((v, i) => calibrateSensorValue(v, i));
+//   // Update gait phase indicators
+//   document.getElementById("left-gait-phase").textContent =
+//     getGaitPhase(leftCal);
+//   document.getElementById("right-gait-phase").textContent =
+//     getGaitPhase(rightCal);
+//   replayBtn.onclick = () => {
+//     if (replayInterval) {
+//       clearInterval(replayInterval);
+//       replayInterval = null;
+//       replayBtn.textContent = "Replay";
+//       return;
+//     }
+//     if (!historyData.length) return;
+//     replayIndex = 0;
+//     replayBtn.textContent = "Stop Replay";
+//     replayInterval = setInterval(() => {
+//       if (replayIndex >= historyData.length) {
+//         clearInterval(replayInterval);
+//         replayInterval = null;
+//         replayBtn.textContent = "Replay";
+//         return;
+//       }
+//       historyRange.value = replayIndex;
+//       updateHistoryDisplay(replayIndex);
+//       replayIndex++;
+//     }, 100); // 100ms per frame
+//   };
+// });
